@@ -160,9 +160,22 @@ Several details of this engine are non-obvious and cost real time to work out:
   VB6 application scaffolding; the synthesizer went to the Windows system
   directory.
 
+- **The word-index scheduler is a dead end for text-to-speech.** The periodic
+  timer callback at `0x12850` walks a 100-entry table at `ctx+0xa4` and posts
+  `PostMessageA(ctx[0], ctx[0x20], entry.word, &entry+4)`, where `ctx[0]` is
+  `SVOpenSpeech`'s arg2. Passing a real window there does make the engine
+  address it, but the table is **never populated** by `SVTTS` (measured: zero
+  entries after an eight-word sentence) and `ctx[0x20]`, the message it would
+  post, stays zero — nothing in the DLL appears to set it. `SVTextToPhon`
+  compares `{` and `}`, but braces in input text are simply spoken aloud
+  rather than parsed as embedded marks. So word-level index reporting is not
+  available through this engine; indexes are reported per utterance instead.
+
 `tools/svprobe.c` is the standalone diagnostic harness used to work all of this
 out. It loads the DLL directly, verifies the exports, reports the error table
-and can render to a WAV file.
+and can render to a WAV file. `tools/svindex.c` is the harness for the index
+scheduler above: it passes a window as arg2, intercepts the engine's
+`PostMessageA` calls and dumps the scheduler table.
 
 ## Credits
 
