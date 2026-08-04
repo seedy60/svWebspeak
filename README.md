@@ -96,11 +96,19 @@ Available in NVDA's Speech settings, and in the settings ring:
 | Pitch | **Relative** to the selected voice — 50% is that voice's own pitch |
 | Volume | 0–100 |
 | Inflection | Maps to `SVSetF0Range` |
+| Capital pitch change | Honoured via inline `PitchCommand` (see below) |
 | Sample rate | 8000, 11025 or 22050 Hz (default). Applied on the next utterance |
 
 Pitch is deliberately relative. Each personality is a complete preset with its
 own pitch, so applying one absolute value to all of them would flatten Child,
 Colossus and Choir Boy into the same voice.
+
+NVDA implements "capital pitch change" by putting a `PitchCommand` inline in
+the speech sequence. The engine's pitch applies to a whole `SVTTS` call, so the
+driver splits the sequence at each pitch change and renders the pieces
+separately, reporting completion only after the last one. Measured: a capital
+spoken with a +30 offset comes out at 132 Hz against 101 Hz for the same
+letter unmodified.
 
 ### Voices
 

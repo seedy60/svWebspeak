@@ -22,7 +22,7 @@ import nvwave
 from autoSettingsUtils.driverSetting import DriverSetting
 from autoSettingsUtils.utils import StringParameterInfo
 from logHandler import log
-from speech.commands import IndexCommand
+from speech.commands import IndexCommand, PitchCommand
 from synthDriverHandler import (
     SynthDriver,
     VoiceInfo,
@@ -98,7 +98,8 @@ class SynthDriver(SynthDriver):
             displayName=_("Sample rate"),
         ),
     )
-    supportedCommands = {IndexCommand}
+    # PitchCommand is how NVDA implements "capital pitch change".
+    supportedCommands = {IndexCommand, PitchCommand}
     supportedNotifications = {synthIndexReached, synthDoneSpeaking}
 
     @classmethod
@@ -126,6 +127,9 @@ class SynthDriver(SynthDriver):
         self._utterIndexes = {}
         self._recovering = False
         self._recoveries = 0
+        # Last pitch actually sent to the engine, so inline pitch changes only
+        # cost a message when the value really changes.
+        self._enginePitch = None
         self._pendingRateChange = False
         # Cancellation epoch, not an utterance counter. NVDA queues multiple
         # utterances with speak() and only interrupts with cancel(), so every
@@ -359,9 +363,11 @@ class SynthDriver(SynthDriver):
         speak() calls within a few hundred ms and a single shared slot loses
         all but the last one's indexes, which stalls the queue.
         """
-        for index in self._utterIndexes.pop(utt, ()):
+        indexes, isFinal = self._utterIndexes.pop(utt, ((), True))
+        for index in indexes:
             synthIndexReached.notify(synth=self, index=index)
-        synthDoneSpeaking.notify(synth=self)
+        if isFinal:
+            synthDoneSpeaking.notify(synth=self)
 
     def _onDone(self, seq, utt):
         if seq != self._speechSeq:
@@ -372,18 +378,65 @@ class SynthDriver(SynthDriver):
 
     # --------------------------------------------------------------- speech
 
-    def speak(self, speechSequence):
-        text = []
-        marks = []
+    def _splitByPitch(self, speechSequence):
+        """Split a sequence into (pitchPercent, text, indexes) segments.
+
+        The engine's pitch is a property of a whole SVTTS call, so an inline
+        pitch change - which is how NVDA implements "capital pitch change" -
+        can only be honoured by rendering each stretch separately.
+        """
+        segments = []
+        curText, curIdx = [], []
+        curPitch = self._pitch
+
+        def flush(pitch):
+            joined = " ".join(t for t in curText if t).strip()
+            if joined or curIdx:
+                segments.append((pitch, joined, list(curIdx)))
+            del curText[:]
+            del curIdx[:]
+
         for item in speechSequence:
             if isinstance(item, str):
-                text.append(item)
+                curText.append(item)
             elif isinstance(item, IndexCommand):
-                marks.append(item.index)
-        full = " ".join(t for t in text if t).strip()
-        if not full:
-            for index in marks:
-                synthIndexReached.notify(synth=self, index=index)
+                curIdx.append(item.index)
+            elif isinstance(item, PitchCommand):
+                try:
+                    newPitch = int(item.newValue)
+                except Exception:
+                    newPitch = self._pitch + getattr(item, "offset", 0)
+                newPitch = max(0, min(100, newPitch))
+                if newPitch != curPitch:
+                    flush(curPitch)
+                    curPitch = newPitch
+        flush(curPitch)
+
+        # A segment with indexes but no text has nothing to render; move its
+        # indexes onto the next segment so they still fire, in order.
+        merged = []
+        carried = []
+        for pitch, txt, idx in segments:
+            if not txt:
+                carried.extend(idx)
+                continue
+            merged.append((pitch, txt, carried + idx))
+            carried = []
+        if carried:
+            if merged:
+                merged[-1] = (merged[-1][0], merged[-1][1],
+                              merged[-1][2] + carried)
+            else:
+                merged.append((self._pitch, "", carried))
+        return merged
+
+    def speak(self, speechSequence):
+        segments = self._splitByPitch(speechSequence)
+        spoken = [s for s in segments if s[1]]
+        if not spoken:
+            for _pitch, _txt, idx in segments:
+                for index in idx:
+                    synthIndexReached.notify(synth=self, index=index)
             synthDoneSpeaking.notify(synth=self)
             return
 
@@ -398,16 +451,19 @@ class SynthDriver(SynthDriver):
         # Do NOT bump the epoch here: that would invalidate audio for
         # utterances NVDA has queued but not yet heard.
         seq = self._speechSeq
-        self._utterId += 1
-        utt = self._utterId
-        # Indexes are kept per utterance and reported when that utterance's
-        # audio has been fed, so several queued speak() calls cannot lose
-        # each other's indexes.
-        self._utterIndexes[utt] = marks
-
-        data = full.encode("mbcs", "replace")
-        self._send(CMD_SPEAK,
-                   struct.pack("<III", seq, utt, len(data)) + data)
+        last = len(spoken) - 1
+        for n, (pitch, txt, idx) in enumerate(spoken):
+            self._applyPitchPercent(pitch)
+            self._utterId += 1
+            utt = self._utterId
+            # Indexes are kept per utterance and reported when that
+            # utterance's audio has been fed, so several queued speak() calls
+            # cannot lose each other's indexes. Only the final segment reports
+            # completion, or NVDA would advance once per segment.
+            self._utterIndexes[utt] = (idx, n == last)
+            data = txt.encode("mbcs", "replace")
+            self._send(CMD_SPEAK,
+                       struct.pack("<III", seq, utt, len(data)) + data)
 
     def cancel(self):
         # Only a cancel invalidates in-flight audio.
@@ -434,6 +490,13 @@ class SynthDriver(SynthDriver):
                 pass
 
     # ------------------------------------------------------------- settings
+
+    def _applyPitchPercent(self, percent):
+        """Set the engine pitch for the next utterance, if it differs."""
+        engine = self._pitchToEngine(percent)
+        if engine != self._enginePitch:
+            self._enginePitch = engine
+            self._paramSend(P_PITCH, engine)
 
     def _paramSend(self, param, value):
         self._send(CMD_PARAM, struct.pack("<Hi", param, int(value)))
@@ -493,7 +556,8 @@ class SynthDriver(SynthDriver):
         try:
             self._pitch = value
             self._userSet.add("pitch")
-            self._paramSend(P_PITCH, self._pitchToEngine(value))
+            self._enginePitch = self._pitchToEngine(value)
+            self._paramSend(P_PITCH, self._enginePitch)
         except Exception:
             log.error("svWebspeak: _set_pitch failed", exc_info=True)
             raise
@@ -544,6 +608,8 @@ class SynthDriver(SynthDriver):
             value = "0"
         self._voice = value
         self._paramSend(P_PERSONALITY, int(value))
+        # The preset resets pitch, so nothing cached is valid any more.
+        self._enginePitch = None
         # SVSetPersonality loads a complete voice preset and resets rate,
         # pitch, volume and inflection to that personality's own values.
         # Measured: rate=300 then personality=1 renders 2.97s, but
@@ -563,7 +629,8 @@ class SynthDriver(SynthDriver):
         if "rate" in self._userSet:
             self._paramSend(P_RATE, self._rateToEngine(self._rate))
         if "pitch" in self._userSet:
-            self._paramSend(P_PITCH, self._pitchToEngine(self._pitch))
+            self._enginePitch = self._pitchToEngine(self._pitch)
+            self._paramSend(P_PITCH, self._enginePitch)
         if "volume" in self._userSet:
             self._paramSend(P_VOLUME, max(0, min(100, self._volume)))
         if "inflection" in self._userSet:
