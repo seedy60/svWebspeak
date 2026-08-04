@@ -179,7 +179,20 @@ class SynthDriver(SynthDriver):
         except Exception:
             self._killProc()
             server.close()
-            if self._initStatus == -4:
+            raise RuntimeError("svWebspeak host did not connect")
+        server.close()
+
+        # The reader thread is what delivers audio and the init status; without
+        # it the driver loads happily and is then permanently silent.
+        self._initEvent = threading.Event()
+        self._initStatus = None
+        self._reader = threading.Thread(target=self._readLoop, daemon=True)
+        self._reader.start()
+
+        if not self._initEvent.wait(INIT_TIMEOUT) or self._initStatus != 0:
+            status = self._initStatus
+            self.terminate()
+            if status == -4:
                 raise RuntimeError(
                     "svWebspeak: the SoftVoice registration number is missing. "
                     "Add a DWORD named SV_KEY under "
@@ -190,7 +203,7 @@ class SynthDriver(SynthDriver):
             raise RuntimeError(
                 "svWebspeak: SoftVoice engine failed to initialise "
                 "(status %r). Check that SVctl32.DLL and SVENG32.DLL are "
-                "present in the add-on folder." % (self._initStatus,)
+                "present in the add-on folder." % (status,)
             )
 
         try:
