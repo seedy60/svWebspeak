@@ -12,6 +12,7 @@ import socket
 import struct
 import subprocess
 import threading
+import time
 
 from collections import OrderedDict
 
@@ -34,6 +35,8 @@ addonHandler.initTranslation()
 HOST_EXE = "svwebspeak-host.exe"
 CONNECT_TIMEOUT = 10.0
 INIT_TIMEOUT = 20.0
+# Cap restarts so a permanently broken engine cannot spin forever.
+MAX_RECOVERIES = 5
 
 CMD_SPEAK, CMD_STOP, CMD_PARAM, CMD_SHUTDOWN = 1, 2, 3, 4
 EVT_AUDIO, EVT_DONE = 1, 2
@@ -121,6 +124,8 @@ class SynthDriver(SynthDriver):
         # Index commands are resolved against how much audio precedes them.
         self._utterId = 0
         self._utterIndexes = {}
+        self._recovering = False
+        self._recoveries = 0
         self._pendingRateChange = False
         # Cancellation epoch, not an utterance counter. NVDA queues multiple
         # utterances with speak() and only interrupts with cancel(), so every
@@ -218,6 +223,38 @@ class SynthDriver(SynthDriver):
             outputDevice=output,
         )
 
+    def _scheduleRecover(self):
+        if self._closing or self._recovering:
+            return
+        if self._recoveries >= MAX_RECOVERIES:
+            log.error("svWebspeak: host has failed %d times; giving up"
+                      % self._recoveries)
+            return
+        self._recovering = True
+        threading.Thread(target=self._recover, daemon=True).start()
+
+    def _recover(self):
+        try:
+            time.sleep(0.25)
+            if self._closing:
+                return
+            self._recoveries += 1
+            log.warning("svWebspeak: host stopped unexpectedly, restarting "
+                        "(attempt %d)" % self._recoveries)
+            self._shutdownHost()
+            try:
+                while True:
+                    self._audioQueue.get_nowait()
+            except queue.Empty:
+                pass
+            self._startHost()
+            # _set_voice re-applies the prosody the user had chosen.
+            self._set_voice(self._voice)
+        except Exception:
+            log.error("svWebspeak: host restart failed", exc_info=True)
+        finally:
+            self._recovering = False
+
     def _killProc(self):
         if self._proc and self._proc.poll() is None:
             try:
@@ -271,6 +308,10 @@ class SynthDriver(SynthDriver):
         except Exception:
             if not self._closing:
                 log.debugWarning("svWebspeak reader stopped", exc_info=True)
+                # Losing the host must not leave the driver permanently mute -
+                # for a screen reader that is the worst possible failure. Bring
+                # it back instead of waiting for the user to switch synths.
+                self._scheduleRecover()
             self._initEvent.set()
 
     # --------------------------------------------------------------- audio

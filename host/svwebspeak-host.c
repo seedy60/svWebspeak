@@ -690,15 +690,13 @@ static DWORD WINAPI readerThread(LPVOID unused)
         memcpy(&c->cmd, buf + 5, 2);
         c->data = buf;
         c->len = len;
-        /* SVTTS blocks the main thread until the whole utterance is rendered,
-           so a stop queued for the main loop would not take effect until that
-           finished - speech could not be interrupted and utterances would
-           serialise. Abort the engine from here so SVTTS returns early. */
-        if (c->cmd == CMD_STOP && g_speaking) {
+        /* Flag the stop for the main loop. Do NOT call into the engine from
+           this thread: SVCTL32 is a single-threaded 1997 DLL and calling
+           SVAbort here while the main thread is inside SVTTS crashes it with
+           an access violation within a few rapid cancel/speak cycles. The
+           main thread performs the abort in serviceQueueWhileSpeaking(). */
+        if (c->cmd == CMD_STOP && g_speaking)
             g_stopReq = 1;
-            if (pAbort && g_h)
-                pAbort(g_h);
-        }
         queuePush(c);
     }
     /* Connection gone: ask the message loop to exit. */
