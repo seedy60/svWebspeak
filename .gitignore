@@ -1,0 +1,19 @@
+# Build output
+*.obj
+*.exe
+*.nvda-addon
+__pycache__/
+*.pyc
+
+# SoftVoice engine binaries.
+#
+# These are proprietary 1997 SoftVoice Inc. / Productivity Works files. They
+# are NOT redistributable, so they are deliberately kept out of the repository.
+# Copy them from your own pwWebSpeak installation - see the README.
+addon/synthDrivers/svWebspeak/SVctl32.DLL
+addon/synthDrivers/svWebspeak/SVENG32.DLL
+addon/synthDrivers/svWebspeak/Svspan32.dll
+addon/synthDrivers/svWebspeak/SVGERM32.DLL
+
+# Local registration file - contains your own SoftVoice key.
+addon/synthDrivers/svWebspeak/svWebspeak-register.reg

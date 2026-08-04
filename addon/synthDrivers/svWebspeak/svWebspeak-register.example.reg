@@ -1,0 +1,17 @@
+Windows Registry Editor Version 5.00
+
+; SoftVoice registration for svWebspeak.
+;
+; Replace PUT_YOUR_KEY_HERE with the registration number your own pwWebSpeak
+; installation passes to SVRegister. Both keys are needed: a 32-bit process is
+; redirected to WOW6432Node, which is where the host actually reads from.
+;
+; Import with administrator rights:  reg import svWebspeak-register.reg
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\SoftVoice\ProdWorks]
+"SV_SSIL"=dword:00000001
+"SV_KEY"=dword:PUT_YOUR_KEY_HERE
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\SoftVoice\ProdWorks]
+"SV_SSIL"=dword:00000001
+"SV_KEY"=dword:PUT_YOUR_KEY_HERE
