@@ -54,7 +54,7 @@ Available in NVDA's Speech settings, and in the settings ring:
 |---|---|
 | Voice | Lets you switch between SoftVoice's 20 voice profiles. |
 | Rate | Maps to the engine's 20–500 range; 50% is its natural speed |
-| Pitch | **Relative** to the selected voice — 50% is that voice's own pitch |
+| Pitch | Relative to the selected voice — 50% is that voice's own pitch |
 | Volume | 0–100 |
 | Inflection | Maps to `SVSetF0Range` |
 | Sample rate | 8000, 11025 or 22050 Hz (default). Applied on the next utterance |
@@ -67,6 +67,30 @@ Colossus and Choir Boy into the same voice.
 The 20 voices are the same in either language: a personality is a set of
 formant parameters held in SVCTL32, while the language DLL supplies the
 text-to-phoneme rules. Only the pronunciation changes.
+
+### Voices
+
+Here are all the different voice profiles that come with SoftVoice.
+
+* Male
+* Female
+* Large Male: who ate all the pies?
+* Child: sweet and innocent.
+* Giant Male: how's the weather up there?
+* Mellow Male and Mellow Female: mellow out, man!
+* Crisp Male: not quite a podcaster though.
+* The Fly: a cute, timid little thing!
+* Robotoid: Mr. Roboto.
+* Martian: foolish earthlings!
+* Colossus: surrender to me or face death!
+* Fast Fred: I can't hear you, you're talking too fast.
+* Old Woman: come inside for some afternoon tea.
+* Munchkin: welcome to the Lollipop Guild.
+* Troll: if you wish to pass me, you must answer my questions three.
+* Nerd: I love sci-fi and I know the very last digit of pi.
+* Milktoast: just milquetoast.
+* Tipsy: because who doesn't love getting a little merry?
+* Choir Boy: do, re, mi, fa, so, la, ti, do!
 
 ## Updates
 
@@ -84,22 +108,6 @@ an update has been applied.
 
 The updater lives in a global plugin rather than the synth driver, so updates
 are still found while a different synthesizer is selected.
-
-If you are on 2520 or earlier you will need to update once by hand; those
-builds predate the updater.
-
-### Cutting a release
-
-The updater compares the release tag against the `version` in `manifest.ini`,
-so the two must agree: version `2521` goes with tag `v2521`. Versions are a
-single increasing integer, and that scheme must not change - `2520` would
-outrank any `1.x` forever, so anyone already installed would stop being
-offered updates.
-
-Attach either the `.nvda-addon` itself or a `.zip` containing one; releases
-currently ship a zip so `sv_license.reg` can travel with it, and the updater
-unwraps that automatically. Note that it installs only the add-on - a new
-registration file still has to be imported by hand.
 
 ## Credits
 
