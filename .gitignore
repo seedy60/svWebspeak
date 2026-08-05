@@ -2,6 +2,7 @@
 *.obj
 *.exe
 *.nvda-addon
+svWebspeak.zip
 __pycache__/
 *.pyc
 
@@ -15,5 +16,8 @@ addon/synthDrivers/svWebspeak/SVENG32.DLL
 addon/synthDrivers/svWebspeak/Svspan32.dll
 addon/synthDrivers/svWebspeak/SVGERM32.DLL
 
-# Local registration file - contains your own SoftVoice key.
+# Registration files - these contain your own SoftVoice key and must never be
+# committed. sv_license.reg is built into the release zip instead.
 addon/synthDrivers/svWebspeak/svWebspeak-register.reg
+sv_license.reg
+*.reg
