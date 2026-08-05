@@ -1,6 +1,6 @@
 # svWebspeak
 
-An NVDA driver for **SoftVoice**, the speech synthesizer that shipped with [pwWebSpeak](https://www.talkinginterfaces.org/artifacts/pwwebspeak/) in the mid to late
+An NVDA driver for SoftVoice, the speech synthesizer that shipped with the [pwWebSpeak](https://www.talkinginterfaces.org/artifacts/pwwebspeak/) talking web browser in the mid to late
 1990s.
 
 The engine (`SVCTL32.DLL`, dated 18 August 1997) is a 32-bit i386 library.
@@ -10,10 +10,6 @@ dedicated host process anyway, and streams the rendered audio back to NVDA over
 a loopback socket, so there is a single code path on every supported version.
 NVDA plays the audio through its own `WavePlayer`, so output device selection,
 audio ducking and speech cancellation all behave normally.
-
-Running out of process has a second benefit regardless of bitness: the engine
-creates a top-level window and is not thread-safe, so an in-process build would
-put both of those inside NVDA.
 
 All 20 SoftVoice personalities are available, with a selectable sample rate up
 to 22050 Hz.
@@ -26,8 +22,8 @@ to 22050 Hz.
 
 ## Registration is required
 
-An unregistered SoftVoice engine does not refuse to speak. It **silently
-truncates every utterance to a single 16 KB buffer** — about 0.7 seconds. This
+An unregistered SoftVoice engine does not refuse to speak. It silently
+truncates every utterance to a single 16 KB buffer; about 0.7 seconds. This
 is the single most confusing failure mode of this engine, so it is worth being
 explicit about.
 
@@ -35,7 +31,7 @@ A registry file, sv_license.reg, is included in the releases. Simply hit Enter o
 
 ## Building
 
-Requires Visual Studio 2022 with the **x86** build tools (the host must be
+Requires Visual Studio 2022 with the x86 build tools (the host must be
 32-bit to match the engine) and Python 3 for packaging.
 
 ```
@@ -43,10 +39,9 @@ build.cmd
 ```
 
 This builds `svwebspeak-host.exe`, copies it into the add-on tree, and produces
-`svWebspeak.nvda-addon`. Install that through NVDA's Add-on Store, or
-*Tools → Add-on store → Install from external source*.
+`svWebspeak.nvda-addon`, which you can install simply by launching the file and answering the prompts.
 
-SVctl32.dll, sveng32.dll and svspan32.dll must be present in addon/synthDrivers/svWebspeak.
+SVctl32.dll, sveng32.dll and svspan32.dll must be present in addon/synthDrivers/svWebspeak. You can get these files from a pwWebspeak installation if you have one.
 
 svspan32.dll is the Spanish language data. The host opens the engine with both
 the English and Spanish language bits, so whichever data DLLs are present
