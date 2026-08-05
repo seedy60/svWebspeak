@@ -167,8 +167,15 @@ int main(int argc, char **argv)
     char path[MAX_PATH];
     WNDCLASSA wc;
     DWORD lic, flags, start;
-    int rc;
+    DWORD licOverride = 0;
+    int rc, ai;
     MSG msg;
+
+    /* --license <n> overrides the registry value so the unregistered
+       behaviour can be demonstrated without editing HKLM. */
+    for (ai = 1; ai < argc - 1; ai++)
+        if (strcmp(argv[ai], "--license") == 0)
+            licOverride = (DWORD)strtoul(argv[ai + 1], NULL, 0);
 
     setvbuf(stdout, NULL, _IONBF, 0);
     SetDllDirectoryA(dir);
@@ -210,11 +217,13 @@ int main(int argc, char **argv)
     if (rc || !g_h)
         return 2;
 
-    lic = readLicense();
+    lic = licOverride ? licOverride : readLicense();
     rc = pRegister(g_h, "ProdWorks", "SV_SSIL", lic, 0);
-    printf("SVRegister rc=%d\n", rc);
-    if (rc)
-        return 3;
+    printf("SVRegister(key=0x%08lx) rc=%d%s\n", lic, rc,
+           rc ? "  *** UNREGISTERED - expect truncation ***" : "  OK");
+    /* Deliberately carry on when rc != 0: an unregistered engine still
+       speaks, it just caps each utterance at one 16 KB buffer, and that
+       cap is the thing this run is meant to show. */
 
     printf("\nspeaking: \"%s\"\n", text);
     printf("ctx[0]=%08lx (hwnd) ctx[0x20]=%08lx (msg) ctx[0xa4]=%08lx (table)\n",

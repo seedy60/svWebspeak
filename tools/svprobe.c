@@ -65,7 +65,7 @@ static PFN_Narrate pNarrate;
 static PFN_TTS pTTS;
 static PFN_ErrText pErrText;
 static PFN_Abort pAbort;
-static PFN_Set1 pSetPersonality, pSetRate;
+static PFN_Set1 pSetPersonality, pSetRate, pSetPitch;
 static PFN_TextToPhon pTextToPhon;
 static PFN_Register pRegister;
 
@@ -86,6 +86,7 @@ static DWORD g_asmSamples, g_asmCap;
 static DWORD g_engineBytes; /* raw bytes the engine emitted this call */
 static int g_captureOnly;   /* 1 = swallow buffers, 0 = forward to device */
 static HWAVEOUT g_hwo;      /* engine device handle, for muting */
+static HWND g_engineCbWnd;  /* engine's waveOut callback window */
 
 static MMRESULT(WINAPI *realWaveOutWrite)(HWAVEOUT, LPWAVEHDR, UINT);
 
@@ -93,7 +94,7 @@ static DWORD probeReadLicense(void)
 {
     HKEY k;
     DWORD v = 0, sz = sizeof(v), type = 0;
-    if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, "SOFTWARE\SoftVoice\ProdWorks", 0,
+    if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, "SOFTWARE\\SoftVoice\\ProdWorks", 0,
                       KEY_QUERY_VALUE, &k) != ERROR_SUCCESS)
         return 0;
     if (RegQueryValueExA(k, "SV_KEY", NULL, &type, (LPBYTE)&v, &sz)
@@ -149,8 +150,17 @@ static MMRESULT WINAPI myWaveOutWrite(HWAVEOUT hwo, LPWAVEHDR hdr, UINT cb)
         }
     }
     if (g_captureOnly) {
-        if (hdr)
+        if (hdr) {
             hdr->dwFlags |= WHDR_DONE;
+            /* Marking the header done is not enough: the engine opens the
+               device with CALLBACK_WINDOW and only queues the next buffer
+               once it sees MM_WOM_DONE. Without this it emits exactly one
+               16 KB buffer per call, which at 22050 Hz is 0.37 s and clips
+               mid-word. The add-on host synthesises the same message. */
+            if (g_engineCbWnd)
+                PostMessageA(g_engineCbWnd, MM_WOM_DONE,
+                             (WPARAM)(ULONG_PTR)hwo, (LPARAM)hdr);
+        }
         return MMSYSERR_NOERROR;
     }
     return realWaveOutWrite ? realWaveOutWrite(hwo, hdr, cb) : MMSYSERR_NOERROR;
@@ -166,6 +176,9 @@ static MMRESULT WINAPI myWaveOutOpen(LPHWAVEOUT phwo, UINT dev,
     MMRESULT r = realWaveOutOpen(phwo, dev, fmt, cb, inst, flags);
     if (r == MMSYSERR_NOERROR && phwo && *phwo)
         g_hwo = *phwo;
+    /* Remember where to send the synthetic MM_WOM_DONE. */
+    if (r == MMSYSERR_NOERROR && (flags & 0x70000) == CALLBACK_WINDOW && cb)
+        g_engineCbWnd = (HWND)(ULONG_PTR)cb;
     return r;
 }
 
@@ -389,6 +402,7 @@ int main(int argc, char **argv)
     const char *text = "Hello. This is the SoftVoice speech synthesizer "
                        "running under Windows 11.";
     int fmt = 0, group = -1, personality = -1, flagSweep = 0, streamTest = 0;
+    int pitch = -1;
     char dllPath[MAX_PATH], outPath[MAX_PATH];
     SVHANDLE h = 0;
     HWND hwnd;
@@ -411,6 +425,8 @@ int main(int argc, char **argv)
             text = argv[++i];
         else if (!strcmp(argv[i], "--personality") && i + 1 < argc)
             personality = atoi(argv[++i]);
+        else if (!strcmp(argv[i], "--pitch") && i + 1 < argc)
+            pitch = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--license") && i + 1 < argc)
             license = (DWORD)strtoul(argv[++i], NULL, 0);
         else if (!strcmp(argv[i], "--trace"))
@@ -455,6 +471,7 @@ int main(int argc, char **argv)
     pAbort = (PFN_Abort)GetProcAddress(g_dll, "_SVAbort@4");
     pSetPersonality = (PFN_Set1)GetProcAddress(g_dll, "_SVSetPersonality@8");
     pSetRate = (PFN_Set1)GetProcAddress(g_dll, "_SVSetRate@8");
+    pSetPitch = (PFN_Set1)GetProcAddress(g_dll, "_SVSetPitch@8");
     pTextToPhon = (PFN_TextToPhon)GetProcAddress(g_dll, "_SVTextToPhon@24");
     pRegister = (PFN_Register)GetProcAddress(g_dll, "_SVRegister@20");
     if (!pOpen || !pNarrate || !pTTS) {
@@ -493,6 +510,9 @@ int main(int argc, char **argv)
     if (personality >= 0 && pSetPersonality)
         printf("personality %d -> rc=%d\n", personality,
                pSetPersonality(h, (DWORD)personality));
+    /* Must follow SVSetPersonality: the preset resets pitch to its own. */
+    if (pitch >= 0 && pSetPitch)
+        printf("pitch %d -> rc=%d\n", pitch, pSetPitch(h, (DWORD)pitch));
 
     /* pwWebSpeak speaks continuously with this same DLL, so the 16 KB ceiling
        must be a mode, not a limit. The engine double-buffers one 0x4000 block
