@@ -61,8 +61,9 @@ DIAGNOSTICS = False
 
 # The 20 built-in personalities. The engine's index order is the REVERSE of
 # the order the names are stored in SVctl32.DLL; verified by measuring each
-# one (idx 3 Child = 401 Hz, 11 Colossus = 66 Hz, 12 Fast Fred is the fastest,
-# 19 Choir Boy = 432 Hz). Getting this wrong makes every voice the wrong voice.
+# one (idx 3 Child = 420 Hz, 8 The Fly = 582 Hz, 11 Colossus = 66 Hz, 12 Fast
+# Fred is the fastest, 19 Choir Boy = 326 Hz). Getting this wrong makes every
+# voice the wrong voice.
 PERSONALITIES = (
     "Male", "Female", "Large Male", "Child", "Giant Male", "Mellow Female",
     "Mellow Male", "Crisp Male", "The Fly", "Robotoid", "Martian", "Colossus",
@@ -70,13 +71,21 @@ PERSONALITIES = (
     "Tipsy", "Choir Boy",
 )
 
-# Each personality's natural pitch in engine units, measured as F0 / 1.16
-# (SVSetPitch(v) yields F0 of about 1.16*v). Pitch is applied relative to
-# these so a voice keeps its character instead of every voice being forced
-# to one pitch.
+# Each personality's own pitch, in engine units. Pitch is applied relative to
+# these so a voice keeps its character instead of every voice being forced to
+# one pitch, which means a wrong value here detunes that voice at every slider
+# position - including the 50% default, where SVSetPitch must be a no-op.
+#
+# These are the engine's own values, read straight out of SVGetVoiceInfo (the
+# 16-bit field at offset 4 of the per-voice block); regenerate with
+# tools\svvoice.exe. They are NOT derived from rendered audio: an earlier
+# table inferred them as F0/1.16 and was wrong for 18 of the 20 voices, badly
+# so for Martian (121 vs 80), The Fly (292 vs 480) and Giant Male (62 vs 45).
+# Verified by rendering: SVSetPitch(value below) reproduces each preset to
+# 0.0%, so the relative mapping is exactly neutral at 50%.
 NATURAL_PITCH = (
-    90, 188, 75, 346, 62, 181, 103, 118, 292, 78,
-    121, 57, 124, 268, 91, 111, 145, 120, 114, 372,
+    90, 200, 80, 350, 45, 190, 110, 125, 480, 90,
+    80, 66, 135, 270, 90, 110, 140, 120, 145, 310,
 )
 
 # Accepted engine ranges, probed via the return code (7010 = out of range).
