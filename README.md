@@ -68,6 +68,39 @@ The 20 voices are the same in either language: a personality is a set of
 formant parameters held in SVCTL32, while the language DLL supplies the
 text-to-phoneme rules. Only the pronunciation changes.
 
+## Updates
+
+svWebspeak checks GitHub for new releases once a day and offers to download
+and install anything newer. Two items are added to NVDA's Tools menu:
+
+| Item | Notes |
+|---|---|
+| Check for svWebspeak updates... | Checks immediately and reports the result either way |
+| Check for svWebspeak updates automatically | Toggles the daily check; the setting persists |
+
+A failed check is retried in ten minutes rather than waiting another day.
+Nothing is installed without asking first, and NVDA prompts to restart once
+an update has been applied.
+
+The updater lives in a global plugin rather than the synth driver, so updates
+are still found while a different synthesizer is selected.
+
+If you are on 2520 or earlier you will need to update once by hand; those
+builds predate the updater.
+
+### Cutting a release
+
+The updater compares the release tag against the `version` in `manifest.ini`,
+so the two must agree: version `2521` goes with tag `v2521`. Versions are a
+single increasing integer, and that scheme must not change - `2520` would
+outrank any `1.x` forever, so anyone already installed would stop being
+offered updates.
+
+Attach either the `.nvda-addon` itself or a `.zip` containing one; releases
+currently ship a zip so `sv_license.reg` can travel with it, and the updater
+unwraps that automatically. Note that it installs only the add-on - a new
+registration file still has to be imported by hand.
+
 ## Credits
 
 - SoftVoice synthesizer © 1994–1997 SoftVoice, Inc.
