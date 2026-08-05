@@ -1,0 +1,125 @@
+<h1 id="svwebspeak">svWebspeak</h1>
+<p>An NVDA driver for SoftVoice, the speech synthesizer that shipped with the <a href="https://www.talkinginterfaces.org/artifacts/pwwebspeak/">pwWebSpeak</a> talking web browser in the mid to late
+1990s.</p>
+<p>The engine (<code>SVCTL32.DLL</code>, dated 18 August 1997) is a 32-bit i386 library.
+NVDA 2026.1 is the first 64-bit release and cannot load it in-process; 2025.3
+and earlier are 32-bit and could. svWebspeak always runs the engine in a small
+dedicated host process anyway, and streams the rendered audio back to NVDA over
+a loopback socket, so there is a single code path on every supported version.
+NVDA plays the audio through its own <code>WavePlayer</code>, so output device selection,
+audio ducking and speech cancellation all behave normally.</p>
+<p>All 20 SoftVoice personalities are available, with a selectable sample rate up
+to 22050 Hz.</p>
+<h2 id="requirements">Requirements</h2>
+<ul>
+<li>NVDA 2019.3 or later</li>
+<li>Windows 10/11 x64</li>
+<li>The SoftVoice registration key in the registry (see below)</li>
+</ul>
+<h2 id="registration-is-required">Registration is required</h2>
+<p>The build of SoftVoice this add-on uses requires a license to work fully. An unlicensed SoftVoice does not refuse to speak. It silently
+truncates every utterance to a single 16 KB buffer; about 0.7 seconds. To guard against this, the add-on checks for the license at runtime. If it is not found, NVDA will refuse to load the synthesizer. No one wants to hear audio being cut off constantly.</p>
+<p>A registry file, sv_license.reg, is included in the <a href="https://github.com/seedy60/svWebspeak/releases">releases</a>. Simply hit Enter on the file and answer yes to the prompts that appear. Please do this before installing the add-on.</p>
+<h2 id="building">Building</h2>
+<p>Requires Visual Studio 2022 with the x86 build tools (the host must be
+32-bit to match the engine) and Python 3 for packaging.</p>
+<pre><code>build.cmd
+</code></pre>
+<p>This builds <code>svwebspeak-host.exe</code>, copies it into the add-on tree, and produces
+<code>svWebspeak.nvda-addon</code>, which you can install simply by launching the file and answering the prompts.</p>
+<p>SVctl32.dll, sveng32.dll and svspan32.dll must be present in addon/synthDrivers/svWebspeak. You can get these files from a pwWebspeak installation if you have one.</p>
+<p>svspan32.dll is the Spanish language data. The host opens the engine with both
+the English and Spanish language bits, so whichever data DLLs are present
+become selectable; drop svspan32.dll and the add-on quietly falls back to
+English only.</p>
+<h2 id="settings">Settings</h2>
+<p>Available in NVDA's Speech settings, and in the settings ring:</p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Voice</td>
+<td>Lets you switch between SoftVoice's 20 voice profiles.</td>
+</tr>
+<tr>
+<td>Rate</td>
+<td>Maps to the engine's 20–500 range; 50% is its natural speed</td>
+</tr>
+<tr>
+<td>Pitch</td>
+<td><strong>Relative</strong> to the selected voice — 50% is that voice's own pitch</td>
+</tr>
+<tr>
+<td>Volume</td>
+<td>0–100</td>
+</tr>
+<tr>
+<td>Inflection</td>
+<td>Maps to <code>SVSetF0Range</code></td>
+</tr>
+<tr>
+<td>Sample rate</td>
+<td>8000, 11025 or 22050 Hz (default). Applied on the next utterance</td>
+</tr>
+<tr>
+<td>Language</td>
+<td>English or Spanish, switched live without restarting the engine</td>
+</tr>
+</tbody>
+</table>
+<p>Pitch is deliberately relative. Each personality is a complete preset with its
+own pitch, so applying one absolute value to all of them would flatten Child,
+Colossus and Choir Boy into the same voice.</p>
+<p>The 20 voices are the same in either language: a personality is a set of
+formant parameters held in SVCTL32, while the language DLL supplies the
+text-to-phoneme rules. Only the pronunciation changes.</p>
+<h2 id="updates">Updates</h2>
+<p>svWebspeak checks GitHub for new releases once a day and offers to download
+and install anything newer. Two items are added to NVDA's Tools menu:</p>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Check for svWebspeak updates...</td>
+<td>Checks immediately and reports the result either way</td>
+</tr>
+<tr>
+<td>Check for svWebspeak updates automatically</td>
+<td>Toggles the daily check; the setting persists</td>
+</tr>
+</tbody>
+</table>
+<p>A failed check is retried in ten minutes rather than waiting another day.
+Nothing is installed without asking first, and NVDA prompts to restart once
+an update has been applied.</p>
+<p>The updater lives in a global plugin rather than the synth driver, so updates
+are still found while a different synthesizer is selected.</p>
+<p>If you are on 2520 or earlier you will need to update once by hand; those
+builds predate the updater.</p>
+<h3 id="cutting-a-release">Cutting a release</h3>
+<p>The updater compares the release tag against the <code>version</code> in <code>manifest.ini</code>,
+so the two must agree: version <code>2521</code> goes with tag <code>v2521</code>. Versions are a
+single increasing integer, and that scheme must not change - <code>2520</code> would
+outrank any <code>1.x</code> forever, so anyone already installed would stop being
+offered updates.</p>
+<p>Attach either the <code>.nvda-addon</code> itself or a <code>.zip</code> containing one; releases
+currently ship a zip so <code>sv_license.reg</code> can travel with it, and the updater
+unwraps that automatically. Note that it installs only the add-on - a new
+registration file still has to be imported by hand.</p>
+<h2 id="credits">Credits</h2>
+<ul>
+<li>SoftVoice synthesizer © 1994–1997 SoftVoice, Inc.</li>
+<li>pwWebSpeak by The Productivity Works, Inc.</li>
+</ul>
+<p>This project contains no SoftVoice code — only an NVDA driver that calls the
+engine's published entry points.</p>
