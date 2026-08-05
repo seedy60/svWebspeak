@@ -42,9 +42,10 @@ This builds `svwebspeak-host.exe`, copies it into the add-on tree, and produces
 
 SVctl32.dll, sveng32.dll and svspan32.dll must be present in addon/synthDrivers/svWebspeak.
 
-svspan32.dll is the Spanish language data. It is copied into the add-on but not
-used yet: the host opens the engine with the English language bit only, so the
-driver reports English voices alone.
+svspan32.dll is the Spanish language data. The host opens the engine with both
+the English and Spanish language bits, so whichever data DLLs are present
+become selectable; drop svspan32.dll and the add-on quietly falls back to
+English only.
 
 ## Settings
 
@@ -58,10 +59,15 @@ Available in NVDA's Speech settings, and in the settings ring:
 | Volume | 0–100 |
 | Inflection | Maps to `SVSetF0Range` |
 | Sample rate | 8000, 11025 or 22050 Hz (default). Applied on the next utterance |
+| Language | English or Spanish, switched live without restarting the engine |
 
 Pitch is deliberately relative. Each personality is a complete preset with its
 own pitch, so applying one absolute value to all of them would flatten Child,
 Colossus and Choir Boy into the same voice.
+
+The 20 voices are the same in either language: a personality is a set of
+formant parameters held in SVCTL32, while the language DLL supplies the
+text-to-phoneme rules. Only the pronunciation changes.
 
 ## Credits
 

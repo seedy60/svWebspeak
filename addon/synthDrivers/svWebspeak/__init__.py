@@ -41,6 +41,12 @@ MAX_RECOVERIES = 5
 CMD_SPEAK, CMD_STOP, CMD_PARAM, CMD_SHUTDOWN = 1, 2, 3, 4
 EVT_AUDIO, EVT_DONE = 1, 2
 P_RATE, P_PITCH, P_VOLUME, P_PERSONALITY, P_INFLECTION = 1, 2, 3, 4, 5
+P_LANGUAGE = 6
+
+# SVSetLanguage takes the engine's own language bit, and only accepts one
+# that was loaded at SVOpenSpeech. The host opens with English|Spanish, so
+# whichever data DLLs are present become selectable.
+LANGUAGES = ((0x1, "en", "English"), (0x2, "es", "Spanish"))
 
 # Sample rates the engine supports. 22050 is the default because it is the
 # best quality it offers; the flags are decoded in the host.
@@ -86,6 +92,7 @@ class SynthDriver(SynthDriver):
         SynthDriver.PitchSetting(),
         SynthDriver.VolumeSetting(),
         SynthDriver.InflectionSetting(),
+        SynthDriver.LanguageSetting(),
         DriverSetting(
             "samplerate",
             # Translators: label for the sample rate setting, with accelerator.
@@ -122,6 +129,8 @@ class SynthDriver(SynthDriver):
         self._voice = "0"
         self._sampleRate = DEFAULT_SAMPLE_RATE
         self._engineRate = 22050
+        self._language = "en"
+        self._langMask = 0x1
         # Index commands are resolved against how much audio precedes them.
         self._utterId = 0
         self._utterIndexes = {}
@@ -297,8 +306,10 @@ class SynthDriver(SynthDriver):
                 if kind == 2:
                     msgId, status = struct.unpack_from("<II", payload, 1)
                     if msgId == 0:
-                        rc, rate, _bits = struct.unpack_from("<iII", payload, 9)
+                        rc, rate, _bits, langs = struct.unpack_from(
+                            "<iIII", payload, 9)
                         self._engineRate = rate
+                        self._langMask = langs
                         self._initStatus = rc
                         self._initEvent.set()
                 elif kind == 3:
@@ -586,16 +597,29 @@ class SynthDriver(SynthDriver):
         # NVDA calls languageIsSupported(self.language) on every speech
         # sequence; the base class returns None, which crashes
         # normalizeLanguage and aborts language handling for the utterance.
-        return "en"
+        return self._language
+
+    def _set_language(self, value):
+        code = (value or "en").split("_")[0].lower()
+        bit = next((b for b, c, _n in LANGUAGES if c == code), None)
+        if bit is None or not (self._langMask & bit):
+            return
+        self._language = code
+        self._paramSend(P_LANGUAGE, bit)
 
     def _get_availableLanguages(self):
-        return {"en"}
+        # Only offer what the engine actually loaded; Spanish depends on
+        # Svspan32.dll being present next to the host.
+        return OrderedDict(
+            (code, StringParameterInfo(code, name))
+            for bit, code, name in LANGUAGES if self._langMask & bit
+        )
 
     def _get_availableVoices(self):
         # Tag each voice with its language, otherwise NVDA has nothing to
         # match against when it filters voices by language.
         return OrderedDict(
-            (str(i), VoiceInfo(str(i), name, "en"))
+            (str(i), VoiceInfo(str(i), name, self._language))
             for i, name in enumerate(PERSONALITIES)
         )
 
@@ -679,6 +703,8 @@ class SynthDriver(SynthDriver):
         self._startHost()
         (self._voice, self._rate, self._pitch, self._volume,
          self._inflection) = settings
+        # A fresh host starts on the engine's default language.
+        self._set_language(self._language)
         # _set_voice re-applies prosody itself, so ordering is safe here.
         self._set_voice(self._voice)
 

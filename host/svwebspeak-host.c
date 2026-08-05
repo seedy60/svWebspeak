@@ -32,6 +32,7 @@
 #pragma comment(lib, "winmm.lib")
 
 #define SV_LANG_ENGLISH 0x00000001
+#define SV_LANG_SPANISH 0x00000002
 #define SV_BITS_8       0x00400000
 #define SV_BITS_16      0x00800000
 #define SV_RATE_8000    0x02000000
@@ -52,6 +53,7 @@
 #define P_VOLUME      3
 #define P_PERSONALITY 4
 #define P_INFLECTION  5
+#define P_LANGUAGE    6
 
 typedef DWORD SVHANDLE;
 typedef int(WINAPI *PFN_Open)(SVHANDLE *, DWORD, DWORD, DWORD, DWORD);
@@ -62,6 +64,7 @@ typedef int(WINAPI *PFN_Reg)(SVHANDLE, const char *, const char *, DWORD, DWORD)
 typedef int(WINAPI *PFN_Set1)(SVHANDLE, DWORD);
 typedef int(WINAPI *PFN_Abort)(SVHANDLE);
 typedef int(WINAPI *PFN_ErrText)(int, char *, WORD);
+typedef int(WINAPI *PFN_GetLangs)(SVHANDLE, DWORD *);
 
 static HMODULE g_dll;
 static PFN_Open pOpen;
@@ -71,6 +74,10 @@ static PFN_Reg pRegister;
 static PFN_Abort pAbort;
 static PFN_ErrText pErrText;
 static PFN_Set1 pSetRate, pSetPitch, pSetVolume, pSetPersonality, pSetF0Range;
+static PFN_Set1 pSetLanguage;
+static PFN_GetLangs pGetLanguages;
+/* Bitmask of languages that actually loaded: 1 English, 2 Spanish, 4 German. */
+static DWORD g_langs;
 
 static SOCKET g_sock = INVALID_SOCKET;
 static SVHANDLE g_h;
@@ -400,6 +407,9 @@ static int engineInit(const char *dir, DWORD rate, DWORD bits)
     pSetVolume = (PFN_Set1)GetProcAddress(g_dll, "_SVSetVolume@8");
     pSetPersonality = (PFN_Set1)GetProcAddress(g_dll, "_SVSetPersonality@8");
     pSetF0Range = (PFN_Set1)GetProcAddress(g_dll, "_SVSetF0Range@8");
+    pSetLanguage = (PFN_Set1)GetProcAddress(g_dll, "_SVSetLanguage@8");
+    pGetLanguages = (PFN_GetLangs)GetProcAddress(
+        g_dll, "_SVGetAvailableLanguages@8");
     if (!pOpen || !pTTS || !pRegister)
         return -2;
 
@@ -417,7 +427,7 @@ static int engineInit(const char *dir, DWORD rate, DWORD bits)
                             HWND_MESSAGE, NULL, wc.hInstance, NULL);
     g_syncMsg = RegisterWindowMessageA("SVSyncMessages");
 
-    flags = SV_LANG_ENGLISH;
+    flags = SV_LANG_ENGLISH | SV_LANG_SPANISH;
     flags |= (bits == 8) ? SV_BITS_8 : SV_BITS_16;
     flags |= (rate == 8000) ? SV_RATE_8000
                             : (rate == 22050 ? SV_RATE_22050 : SV_RATE_11025);
@@ -434,6 +444,12 @@ static int engineInit(const char *dir, DWORD rate, DWORD bits)
     }
     if (rc != 0)
         return rc;
+
+    /* Which languages actually loaded - Spanish only if Svspan32.dll is
+       present. SVSetLanguage refuses anything not loaded here. */
+    g_langs = SV_LANG_ENGLISH;
+    if (pGetLanguages)
+        pGetLanguages(g_h, &g_langs);
 
     g_rate = rate;
     g_bits = bits;
@@ -608,6 +624,10 @@ static int setParam(WORD p, int v)
     case P_INFLECTION:
         if (pSetF0Range)
             rc = pSetF0Range(g_h, (DWORD)v);
+        break;
+    case P_LANGUAGE:
+        if (pSetLanguage)
+            rc = pSetLanguage(g_h, (DWORD)v);
         break;
     }
     return rc;
@@ -796,12 +816,13 @@ int main(int argc, char **argv)
 
     rc = engineInit(dir, rate, bits);
     {
-        char init[12];
-        DWORD r = g_rate, b = g_bits;
+        char init[16];
+        DWORD r = g_rate, b = g_bits, l = g_langs;
         memcpy(init, &rc, 4);
         memcpy(init + 4, &r, 4);
         memcpy(init + 8, &b, 4);
-        sendResponse(0, (DWORD)rc, init, 12);
+        memcpy(init + 12, &l, 4);
+        sendResponse(0, (DWORD)rc, init, 16);
     }
     if (rc != 0) {
         Sleep(300); /* let the writer flush the init response */
