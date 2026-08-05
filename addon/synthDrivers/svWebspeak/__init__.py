@@ -1,10 +1,13 @@
 # svWebspeak - SoftVoice synthesizer driver for NVDA.
 #
-# NVDA is 64-bit; SVctl32.DLL is a 1997 32-bit i386 library, so the engine runs
-# in softvoice-host.exe and we talk to it over a loopback socket. The host
-# captures the engine's PCM and streams it here; playback is done by NVDA's own
-# WavePlayer so output device selection, ducking and cancellation all behave
-# normally.
+# SVctl32.DLL is a 1997 32-bit i386 library. NVDA 2026.1 is the first 64-bit
+# release and cannot load it in-process; 2025.3 and earlier are 32-bit and
+# could. The engine runs in svwebspeak-host.exe on every version regardless, so
+# there is one code path - and since the engine creates a top-level window and
+# is not thread-safe, keeping it out of NVDA's process is worth doing anyway.
+# The host captures the engine's PCM and streams it here; playback is done by
+# NVDA's own WavePlayer so output device selection, ducking and cancellation
+# all behave normally.
 
 import os
 import queue

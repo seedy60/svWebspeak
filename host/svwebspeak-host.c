@@ -1,8 +1,11 @@
 /*
  * svwebspeak-host.exe - 32-bit host for the SoftVoice SVCTL32 engine.
  *
- * NVDA is 64-bit and cannot load this 1997 i386 DLL in-process, so the driver
- * launches this host and talks to it over a loopback socket.
+ * NVDA 2026.1 is the first 64-bit release and cannot load this 1997 i386 DLL
+ * in-process; 2025.3 and earlier are 32-bit and could. The driver launches this
+ * host on every version regardless, so there is one code path - and because the
+ * engine creates a top-level window and is not thread-safe, keeping it out of
+ * NVDA's process is worth doing on its own merits.
  *
  * Everything here rests on findings recovered by disassembly:
  *   - SVOpenSpeech flags: low 7 bits = language, 0x400000/0x800000 = 8/16-bit,

@@ -3,11 +3,17 @@
 An NVDA driver for **SoftVoice**, the speech synthesizer that shipped with [pwWebSpeak](https://www.talkinginterfaces.org/artifacts/pwwebspeak/) in the mid to late
 1990s.
 
-The engine (`SVCTL32.DLL`, dated 18 August 1997) is a 32-bit i386 library. Modern
-NVDA is 64-bit and cannot load it in-process, so svWebspeak runs the engine in a
-small dedicated host process and streams the rendered audio back to NVDA over a
-loopback socket. NVDA plays the audio through its own `WavePlayer`, so output
-device selection, audio ducking and speech cancellation all behave normally.
+The engine (`SVCTL32.DLL`, dated 18 August 1997) is a 32-bit i386 library.
+NVDA 2026.1 is the first 64-bit release and cannot load it in-process; 2025.3
+and earlier are 32-bit and could. svWebspeak always runs the engine in a small
+dedicated host process anyway, and streams the rendered audio back to NVDA over
+a loopback socket, so there is a single code path on every supported version.
+NVDA plays the audio through its own `WavePlayer`, so output device selection,
+audio ducking and speech cancellation all behave normally.
+
+Running out of process has a second benefit regardless of bitness: the engine
+creates a top-level window and is not thread-safe, so an in-process build would
+put both of those inside NVDA.
 
 All 20 SoftVoice personalities are available, with a selectable sample rate up
 to 22050 Hz.
