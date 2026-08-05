@@ -22,12 +22,10 @@ to 22050 Hz.
 
 ## Registration is required
 
-An unregistered SoftVoice engine does not refuse to speak. It silently
-truncates every utterance to a single 16 KB buffer; about 0.7 seconds. This
-is the single most confusing failure mode of this engine, so it is worth being
-explicit about.
+The build of SoftVoice this add-on uses requires a license to work fully. An unlicensed SoftVoice does not refuse to speak. It silently
+truncates every utterance to a single 16 KB buffer; about 0.7 seconds. To guard against this, the add-on checks for the license at runtime. If it is not found, NVDA will refuse to load the synthesizer. No one wants to hear audio being cut off constantly.
 
-A registry file, sv_license.reg, is included in the releases. Simply hit Enter on the file and answer yes to the prompts that appear. Please do this before installing the add-on.
+A registry file, sv_license.reg, is included in the [releases](https://github.com/seedy60/svWebspeak/releases). Simply hit Enter on the file and answer yes to the prompts that appear. Please do this before installing the add-on.
 
 ## Building
 
