@@ -40,7 +40,11 @@ This builds `svwebspeak-host.exe`, copies it into the add-on tree, and produces
 `svWebspeak.nvda-addon`. Install that through NVDA's Add-on Store, or
 *Tools → Add-on store → Install from external source*.
 
-SVctl32.dll, sveng32.dll and svspan32.dll must be present in addon/synthDrivers/spWebspeak.
+SVctl32.dll, sveng32.dll and svspan32.dll must be present in addon/synthDrivers/svWebspeak.
+
+svspan32.dll is the Spanish language data. It is copied into the add-on but not
+used yet: the host opens the engine with the English language bit only, so the
+driver reports English voices alone.
 
 ## Settings
 
