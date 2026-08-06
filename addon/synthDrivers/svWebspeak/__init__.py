@@ -378,6 +378,43 @@ class SynthDriver(SynthDriver):
             except Exception:
                 log.debugWarning("svWebspeak feed failed", exc_info=True)
 
+    def _outstandingAudio(self):
+        """True while more audio for this run of speech is still expected."""
+        return bool(self._utterIndexes) or not self._audioQueue.empty()
+
+    def _releasePlayer(self):
+        """Drain the player once nothing further is expected.
+
+        WavePlayer.feed() enables NVDA's audio ducker on every call, and only
+        idle() or stop() release it again. cancel() calls stop(), which is why
+        interrupting speech restored the volume, but an utterance left to
+        finish on its own never released the duck and the system stayed
+        quiet indefinitely.
+
+        idle() syncs before it releases, so calling it at every utterance
+        boundary would drain the buffer between queued utterances and bring
+        back the choppy, word-at-a-time delivery. Only sync when nothing is
+        outstanding, then check again: sync() blocks, and NVDA can queue more
+        speech while it does. This mirrors what oneCore does.
+        """
+        player = self._player
+        if not player or self._outstandingAudio():
+            return
+        # Best effort only. idle() syncs internally, so a failure here must
+        # not skip it - that would leave the duck applied, which is the whole
+        # bug this guards against.
+        try:
+            player.sync()
+        except Exception:
+            log.debugWarning("svWebspeak: player sync failed", exc_info=True)
+        if self._outstandingAudio():
+            return
+        try:
+            player.idle()
+        except Exception:
+            log.debugWarning("svWebspeak: could not idle the player",
+                             exc_info=True)
+
     def _finishUtterance(self, utt):
         """Report an utterance's indexes, then its completion, in order.
 
@@ -390,6 +427,9 @@ class SynthDriver(SynthDriver):
         for index in indexes:
             synthIndexReached.notify(synth=self, index=index)
         if isFinal:
+            # Release the duck before announcing completion, so the volume is
+            # already back to normal by the time NVDA acts on it.
+            self._releasePlayer()
             synthDoneSpeaking.notify(synth=self)
 
     def _onDone(self, seq, utt):
