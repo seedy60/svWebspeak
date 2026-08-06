@@ -52,7 +52,7 @@ English only.</p>
 </tr>
 <tr>
 <td>Pitch</td>
-<td><strong>Relative</strong> to the selected voice — 50% is that voice's own pitch</td>
+<td>Relative to the selected voice — 50% is that voice's own pitch</td>
 </tr>
 <tr>
 <td>Volume</td>
@@ -78,6 +78,29 @@ Colossus and Choir Boy into the same voice.</p>
 <p>The 20 voices are the same in either language: a personality is a set of
 formant parameters held in SVCTL32, while the language DLL supplies the
 text-to-phoneme rules. Only the pronunciation changes.</p>
+<h3 id="voices">Voices</h3>
+<p>Here are all the different voice profiles that come with SoftVoice.</p>
+<ul>
+<li>Male</li>
+<li>Female</li>
+<li>Large Male: who ate all the pies?</li>
+<li>Child: sweet and innocent.</li>
+<li>Giant Male: how's the weather up there?</li>
+<li>Mellow Male and Mellow Female: mellow out, man!</li>
+<li>Crisp Male: not quite a podcaster though.</li>
+<li>The Fly: a cute, timid little thing!</li>
+<li>Robotoid: Mr. Roboto.</li>
+<li>Martian: foolish earthlings!</li>
+<li>Colossus: surrender to me or face death!</li>
+<li>Fast Fred: I can't hear you, you're talking too fast.</li>
+<li>Old Woman: come inside for some afternoon tea.</li>
+<li>Munchkin: welcome to the Lollipop Guild.</li>
+<li>Troll: if you wish to pass me, you must answer my questions three.</li>
+<li>Nerd: I love sci-fi and I know the very last digit of pi.</li>
+<li>Milktoast: just milquetoast.</li>
+<li>Tipsy: because who doesn't love getting a little merry?</li>
+<li>Choir Boy: do, re, mi, fa, so, la, ti, do!</li>
+</ul>
 <h2 id="updates">Updates</h2>
 <p>svWebspeak checks GitHub for new releases once a day and offers to download
 and install anything newer. Two items are added to NVDA's Tools menu:</p>
@@ -104,18 +127,6 @@ Nothing is installed without asking first, and NVDA prompts to restart once
 an update has been applied.</p>
 <p>The updater lives in a global plugin rather than the synth driver, so updates
 are still found while a different synthesizer is selected.</p>
-<p>If you are on 2520 or earlier you will need to update once by hand; those
-builds predate the updater.</p>
-<h3 id="cutting-a-release">Cutting a release</h3>
-<p>The updater compares the release tag against the <code>version</code> in <code>manifest.ini</code>,
-so the two must agree: version <code>2521</code> goes with tag <code>v2521</code>. Versions are a
-single increasing integer, and that scheme must not change - <code>2520</code> would
-outrank any <code>1.x</code> forever, so anyone already installed would stop being
-offered updates.</p>
-<p>Attach either the <code>.nvda-addon</code> itself or a <code>.zip</code> containing one; releases
-currently ship a zip so <code>sv_license.reg</code> can travel with it, and the updater
-unwraps that automatically. Note that it installs only the add-on - a new
-registration file still has to be imported by hand.</p>
 <h2 id="credits">Credits</h2>
 <ul>
 <li>SoftVoice synthesizer © 1994–1997 SoftVoice, Inc.</li>
