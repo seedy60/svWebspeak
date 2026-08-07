@@ -148,6 +148,10 @@ class SynthDriver(SynthDriver):
         self._utterIndexes = {}
         self._recovering = False
         self._recoveries = 0
+        # Identifies the current host. Bumped on every teardown so a reader
+        # thread still unwinding from a previous host cannot be mistaken for
+        # the live one - see _readLoop.
+        self._generation = 0
         # Last pitch actually sent to the engine, so inline pitch changes only
         # cost a message when the value really changes.
         self._enginePitch = None
@@ -216,12 +220,20 @@ class SynthDriver(SynthDriver):
         # it the driver loads happily and is then permanently silent.
         self._initEvent = threading.Event()
         self._initStatus = None
-        self._reader = threading.Thread(target=self._readLoop, daemon=True)
+        self._reader = threading.Thread(
+            target=self._readLoop, args=(self._conn, self._generation),
+            daemon=True,
+        )
         self._reader.start()
 
         if not self._initEvent.wait(INIT_TIMEOUT) or self._initStatus != 0:
             status = self._initStatus
-            self.terminate()
+            # Tear down this half-built host, but NOT through terminate():
+            # that stops the player thread for good, and nothing restarts it,
+            # so the driver stays silent even once a later host comes up
+            # healthy. That is what made a burst of sample rate changes kill
+            # speech until the user switched synthesizer and back.
+            self._shutdownHost()
             if status == -4:
                 raise RuntimeError(
                     "svWebspeak: the SoftVoice registration number is missing. "
@@ -300,20 +312,33 @@ class SynthDriver(SynthDriver):
                 if not self._closing:
                     log.error("svWebspeak host connection lost", exc_info=True)
 
-    def _recvExact(self, n):
+    @staticmethod
+    def _recvExact(conn, n):
         buf = b""
         while len(buf) < n:
-            chunk = self._conn.recv(n - len(buf))
+            chunk = conn.recv(n - len(buf))
             if not chunk:
                 raise ConnectionError("host closed")
             buf += chunk
         return buf
 
-    def _readLoop(self):
+    def _readLoop(self, conn, generation):
+        """Drain one host's connection.
+
+        The connection is held locally rather than read off self._conn: a
+        restart replaces that attribute, and a reader still unwinding from
+        the old host would otherwise start pulling bytes off the *new*
+        socket, so two threads would interleave reads of the same stream and
+        desynchronise the framing.
+
+        generation identifies which host this reader belongs to, so a reader
+        retired by a deliberate restart does not report its own shutdown as a
+        crash and burn a recovery attempt.
+        """
         try:
             while True:
-                (length,) = struct.unpack("<I", self._recvExact(4))
-                payload = self._recvExact(length)
+                (length,) = struct.unpack("<I", self._recvExact(conn, 4))
+                payload = self._recvExact(conn, length)
                 kind = payload[0]
                 if kind == 2:
                     msgId, status = struct.unpack_from("<II", payload, 1)
@@ -333,7 +358,10 @@ class SynthDriver(SynthDriver):
                         seq, utt = struct.unpack_from("<II", payload, 3)
                         self._onDone(seq, utt)
         except Exception:
-            if not self._closing:
+            # Only the reader for the host that is still current may report a
+            # crash. A retired one is simply finishing the shutdown it was
+            # asked to perform.
+            if not self._closing and generation == self._generation:
                 log.debugWarning("svWebspeak reader stopped", exc_info=True)
                 # Losing the host must not leave the driver permanently mute -
                 # for a screen reader that is the worst possible failure. Bring
@@ -503,13 +531,29 @@ class SynthDriver(SynthDriver):
             synthDoneSpeaking.notify(synth=self)
             return
 
-        if self._pendingRateChange:
+        # Only swap hosts when nothing is still being heard. _restart() throws
+        # away whatever is queued but not yet handed to WavePlayer, and since
+        # feed() blocks once the device buffer is full, that is routinely a
+        # good part of an utterance - which is what still clipped the settings
+        # ring announcement even after the retiring player was left to drain.
+        # _outstandingAudio() being false is a real all-clear: _releasePlayer()
+        # syncs before reporting an utterance done, so the player is empty too.
+        # The change simply waits for the next quiet moment; nothing is lost,
+        # and this utterance is spoken at the old rate instead of being cut.
+        if self._pendingRateChange and self._outstandingAudio():
+            self._diag("samplerate change held: audio still in flight")
+        elif self._pendingRateChange:
             self._pendingRateChange = False
             self._diag("applying deferred samplerate %s" % self._sampleRate)
             try:
                 self._restart()
             except Exception:
                 log.error("svWebspeak: samplerate restart failed", exc_info=True)
+                # The host is now down and nothing else will notice: the
+                # reader that would have raised the alarm is the one that
+                # just died. Without this the driver stays mute until the
+                # user switches synthesizer and back.
+                self._scheduleRecover()
 
         # Do NOT bump the epoch here: that would invalidate audio for
         # utterances NVDA has queued but not yet heard.
@@ -797,6 +841,9 @@ class SynthDriver(SynthDriver):
         waiting for it.
         """
         self._closing = True
+        # Retire this host generation before touching the socket, so the
+        # reader unwinding from it knows it is obsolete and stays quiet.
+        self._generation += 1
         try:
             self._send(CMD_SHUTDOWN)
         except Exception:
