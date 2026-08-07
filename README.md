@@ -2,6 +2,7 @@
 
 An NVDA driver for SoftVoice, the speech synthesizer that shipped with the [pwWebSpeak](https://www.talkinginterfaces.org/artifacts/pwwebspeak/) talking web browser in the mid to late
 1990s.
+While SoftVoice drivers have existed in the past, they used a version of the synthesizer  that used 8-bit audio and could only process a certain amount of characters. This version, however, supports higher sample rates, uses 16-bit audio and has no character limit.
 
 The engine (`SVCTL32.DLL`, dated 18 August 1997) is a 32-bit i386 library.
 NVDA 2026.1 is the first 64-bit release and cannot load it in-process; 2025.3
