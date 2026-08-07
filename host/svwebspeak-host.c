@@ -339,17 +339,56 @@ static void sendEvent(WORD evt, const void *data, DWORD n)
     free(buf);
 }
 
+/* Samples of decay kept after the last audible one, so a fading tail is not
+   clipped. 20 ms is inaudible as a gap but ample for the engine's release. */
+#define TAIL_PAD_MS 20
+/* The engine renders digital silence as zero; allow a little slack. */
+#define SILENCE_LEVEL 8
+
+/* How much of the buffer is worth sending: everything up to the last audible
+   sample, plus a short decay pad.
+
+   The engine always finishes an utterance by zero-filling the rest of its
+   current 8192-byte buffer and then emitting one or two more that are pure
+   silence. Shipping that costs 0.41 s of dead air per utterance at 22050 Hz
+   and 0.52 s at 11025 - for a short word like "a" it is 70% of everything
+   sent. It delays synthDoneSpeaking by the same amount, so NVDA's queue
+   lags behind, which is most obvious with speak-typed-words.
+
+   Trailing silence is withheld rather than discarded: if the engine goes on
+   to produce more speech, the gap is interior silence and must be kept, and
+   the next call ships it because the last audible sample has moved. Only
+   what is still trailing when the utterance ends is dropped.
+
+   Caller must hold g_lock. */
+static DWORD audibleExtent(void)
+{
+    DWORD i, pad;
+    if (!g_pcmLen)
+        return 0;
+    for (i = g_pcmLen; i > 0; i--) {
+        short v = g_pcm[i - 1];
+        if (v > SILENCE_LEVEL || v < -SILENCE_LEVEL)
+            break;
+    }
+    if (!i)
+        return 0; /* nothing audible yet; hold it all back */
+    pad = g_rate / (1000 / TAIL_PAD_MS);
+    return (i + pad > g_pcmLen) ? g_pcmLen : i + pad;
+}
+
 /* Ship whatever new PCM the engine has produced. */
 static void flushAudio(void)
 {
-    DWORD have, n;
+    DWORD have, n, upto;
     short *copy = NULL;
     EnterCriticalSection(&g_lock);
-    have = g_pcmLen - g_pcmSent;
+    upto = audibleExtent();
+    have = (upto > g_pcmSent) ? upto - g_pcmSent : 0;
     if (have) {
         copy = (short *)malloc(have * sizeof(short));
         memcpy(copy, g_pcm + g_pcmSent, have * sizeof(short));
-        g_pcmSent = g_pcmLen;
+        g_pcmSent += have;
     }
     LeaveCriticalSection(&g_lock);
     if (!have)
