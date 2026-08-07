@@ -58,7 +58,7 @@ Available in NVDA's Speech settings, and in the settings ring:
 | Pitch | Relative to the selected voice — 50% is that voice's own pitch |
 | Volume | 0–100 |
 | Inflection | Maps to `SVSetF0Range` |
-| Sample rate | 8000, 11025 or 22050 Hz (default). Applied on the next utterance |
+| Sample rate | 8000, 11025 or 22050 Hz (default). Applied at the next pause in speech |
 | Language | English or Spanish, switched live without restarting the engine |
 
 Pitch is deliberately relative. Each personality is a complete preset with its
