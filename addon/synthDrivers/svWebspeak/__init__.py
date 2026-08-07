@@ -744,7 +744,9 @@ class SynthDriver(SynthDriver):
         """
         settings = (self._voice, self._rate, self._pitch, self._volume,
                     self._inflection)
-        self._shutdownHost()
+        # Keep anything already playing audible; only the host and the player
+        # are being replaced, not the speech the user is currently hearing.
+        self._shutdownHost(drainPlayer=True)
         # Queued PCM belongs to the old sample rate; playing it through the
         # new device would sound wrong.
         try:
@@ -752,7 +754,15 @@ class SynthDriver(SynthDriver):
                 self._audioQueue.get_nowait()
         except queue.Empty:
             pass
+        # Utterances the old host never finished will never report now. Their
+        # entries would otherwise keep _outstandingAudio() true for good,
+        # which stops the player ever being idled and leaves NVDA's ducking
+        # applied permanently. Report completion so the speech queue advances.
+        hadPending = bool(self._utterIndexes)
+        self._utterIndexes.clear()
         self._startHost()
+        if hadPending:
+            synthDoneSpeaking.notify(synth=self)
         (self._voice, self._rate, self._pitch, self._volume,
          self._inflection) = settings
         # A fresh host starts on the engine's default language.
@@ -762,20 +772,49 @@ class SynthDriver(SynthDriver):
 
     # ------------------------------------------------------------ lifecycle
 
-    def _shutdownHost(self):
-        """Stop the host process and audio device, leaving the driver usable."""
+    @staticmethod
+    def _drainAndClose(player):
+        """Let a retired player finish, then release it. Runs off-thread."""
+        try:
+            player.idle()  # blocks until the buffer has played, frees the duck
+        except Exception:
+            pass
+        try:
+            player.close()
+        except Exception:
+            pass
+
+    def _shutdownHost(self, drainPlayer=False):
+        """Stop the host process and audio device, leaving the driver usable.
+
+        drainPlayer keeps whatever is already playing audible. A sample rate
+        change needs a new player, but stopping the old one discards audio
+        that is still being heard: the settings ring applies the change
+        between announcing the setting name and its value, so "Sample rate"
+        was being chopped mid-word - reproducibly down to "Sam" when the
+        change landed 50 ms in. The retired player is drained on its own
+        thread so neither NVDA's main thread nor the player thread blocks
+        waiting for it.
+        """
         self._closing = True
         try:
             self._send(CMD_SHUTDOWN)
         except Exception:
             pass
         if self._player:
-            try:
-                self._player.stop()
-                self._player.close()
-            except Exception:
-                pass
+            player = self._player
             self._player = None
+            if drainPlayer:
+                threading.Thread(
+                    target=self._drainAndClose, args=(player,),
+                    name="svWebspeak drain", daemon=True,
+                ).start()
+            else:
+                try:
+                    player.stop()
+                    player.close()
+                except Exception:
+                    pass
         if self._conn:
             try:
                 self._conn.close()
